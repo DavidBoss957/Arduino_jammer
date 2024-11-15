@@ -1,146 +1,177 @@
-#include <ELECHOUSE_CC1101_SRC_DRV.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <ELECHOUSE_CC1101_SRC_DRV.h>
 
 // Configuración de la pantalla LCD con I2C (A5 - SCL, A4 - SDA)
 LiquidCrystal_I2C lcd(0x27, 16, 2);  // Cambia la dirección I2C si es necesario
 
 // Pines para botones y LEDs
-const int botonLectura = 4;  // Botón para lectura de frecuencia
-const int botonAtaque = 7;   // Botón para iniciar ataque
-const int ledLectura = 9;    // LED para modo de lectura
-const int ledAtaque = 8;     // LED para modo de ataque
+const int botonLectura = 4;
+const int botonAtaque = 7;
+const int botonMenu = 6;
+const int ledLectura = 9;  // LED para modo de lectura
+const int ledAtaque = 8;   // LED para modo de ataque
 
-bool modoSeleccionado = false;  // Para saber si ya se seleccionó un modo
+// Estados del sistema
+enum Estado {
+  MENU_PRINCIPAL,
+  MODO_LECTURA,
+  MODO_ATAQUE
+};
+Estado estadoActual = MENU_PRINCIPAL;
+
+// Variables para controlar el envío en modo ataque
+unsigned long ultimoEnvio = 0;  // Marca de tiempo del último envío
+const unsigned long intervaloEnvio = 500;  // Intervalo de envío en milisegundos
 
 void setup() {
   // Inicialización de la pantalla LCD
-  lcd.init();  // Cambiado a lcd.init() en lugar de lcd.begin()
+  lcd.init();
   lcd.backlight();
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("1: Leer Frecuencia");
-  lcd.setCursor(0, 1);
-  lcd.print("2: Iniciar Ataque");
+  mostrarMenuPrincipal();
 
   // Configuración de pines para botones y LEDs
   pinMode(botonLectura, INPUT_PULLUP);
   pinMode(botonAtaque, INPUT_PULLUP);
+  pinMode(botonMenu, INPUT_PULLUP);
   pinMode(ledLectura, OUTPUT);
   pinMode(ledAtaque, OUTPUT);
-  
-  // Inicialización de la comunicación serie
+
+  // Inicialización de la comunicación serie para depuración
   Serial.begin(9600);
-  
+  Serial.println("Sistema iniciado. Menú principal.");
+
   // Inicialización del CC1101
   ELECHOUSE_cc1101.Init();
   Serial.println("CC1101 Inicializado correctamente");
 }
 
 void loop() {
-  // Mostrar el menú hasta que se presione un botón
-  if (!modoSeleccionado) {
-    // Leer estado de los botones
-    int estadoBotonLectura = digitalRead(botonLectura);
-    int estadoBotonAtaque = digitalRead(botonAtaque);
-
-    if (estadoBotonLectura == LOW) {  // Botón de lectura presionado
-      delay(50);  // Debounce
-      while (digitalRead(botonLectura) == LOW);  // Espera a que el botón se suelte
-      modoSeleccionado = true;
-      iniciarLecturaFrecuencia();  // Ejecuta la función de lectura de frecuencia
-    }
-
-    if (estadoBotonAtaque == LOW) {  // Botón de ataque presionado
-      delay(50);  // Debounce
-      while (digitalRead(botonAtaque) == LOW);  // Espera a que el botón se suelte
-      modoSeleccionado = true;
-      iniciarAtaque();  // Ejecuta la función de ataque
-    }
+  switch (estadoActual) {
+    case MENU_PRINCIPAL:
+      gestionarMenu();
+      break;
+    case MODO_LECTURA:
+      gestionarModoLectura();
+      break;
+    case MODO_ATAQUE:
+      gestionarModoAtaque();
+      break;
   }
 }
 
-void iniciarLecturaFrecuencia() {
-  // Encender LED de lectura
-  digitalWrite(ledLectura, HIGH);
+void gestionarMenu() {
+  // Comprobación de botón de lectura
+  if (leerBoton(botonLectura)) {
+    estadoActual = MODO_LECTURA;
+    iniciarModoLectura();
+  } 
+  // Comprobación de botón de ataque
+  else if (leerBoton(botonAtaque)) {
+    estadoActual = MODO_ATAQUE;
+    iniciarModoAtaque();
+  }
+}
+
+// Función para iniciar el modo de lectura de frecuencia
+void iniciarModoLectura() {
+  digitalWrite(ledLectura, HIGH);  // Enciende LED de lectura
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("Leyendo Frecuencia");
+  lcd.print("Modo: Lectura");
+  Serial.println("Modo de lectura activado");
 
   // Configurar el CC1101 en modo de recepción
   ELECHOUSE_cc1101.setMHZ(433.900);  // Ajusta la frecuencia para escuchar
   ELECHOUSE_cc1101.SetRx();
-  Serial.println("Modo de lectura activado");
-
-  // Bucle de lectura de frecuencia
-  while (true) {
-    if (digitalRead(botonLectura) == LOW) {  // Si el botón es presionado para salir
-      delay(50);  // Debounce
-      while (digitalRead(botonLectura) == LOW);  // Espera a que el botón se suelte
-      break;  // Salir del modo de lectura
-    }
-
-    if (ELECHOUSE_cc1101.CheckRxFifo(100)) {  // Verifica si hay datos
-      byte receivedData[64];  // Buffer de datos recibidos
-      int length = ELECHOUSE_cc1101.ReceiveData(receivedData);
-
-      // Mostrar la frecuencia leída en el monitor serie y LCD
-      Serial.print("Datos recibidos: ");
-      for (int i = 0; i < length; i++) {
-        Serial.print(receivedData[i], HEX);
-        Serial.print(" ");
-      }
-      Serial.println();
-      
-      // Mostrar en la pantalla LCD
-      lcd.setCursor(0, 1);
-      lcd.print("Frecuencia Leida");
-    }
-    delay(100);  // Pausa para evitar saturación
-  }
-
-  // Salir del modo de lectura
-  digitalWrite(ledLectura, LOW);  // Apagar LED al salir del modo
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("1:Leer Freq");
-  lcd.setCursor(0, 1);
-  lcd.print("2:Ataque");
-  modoSeleccionado = false;  // Permitir volver al menú
 }
 
-void iniciarAtaque() {
-  // Encender LED de ataque
-  digitalWrite(ledAtaque, HIGH);
+// Función para gestionar el modo de lectura
+void gestionarModoLectura() {
+  if (leerBoton(botonMenu)) {  // Salir del modo de lectura
+    regresarMenu();
+    digitalWrite(ledLectura, LOW);  // Apaga LED de lectura
+    return;
+  }
+
+  if (ELECHOUSE_cc1101.CheckRxFifo(100)) {  // Verifica si hay datos
+    byte receivedData[64];  // Buffer de datos recibidos
+    int length = ELECHOUSE_cc1101.ReceiveData(receivedData);
+
+    // Mostrar la frecuencia leída en el monitor serie
+    Serial.print("Datos recibidos: ");
+    for (int i = 0; i < length; i++) {
+      Serial.print(receivedData[i], HEX);
+      Serial.print(" ");
+    }
+    Serial.println();
+    
+    // Mostrar en la pantalla LCD
+    lcd.setCursor(0, 1);
+    lcd.print("Frecuencia Leida");
+  }
+}
+
+// Función para iniciar el modo de ataque
+void iniciarModoAtaque() {
+  digitalWrite(ledAtaque, HIGH);  // Enciende LED de ataque
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("Iniciando Ataque");
+  lcd.print("Modo: Ataque");
+  Serial.println("Modo de ataque activado");
 
   // Configurar el CC1101 para el ataque (transmisión continua)
   ELECHOUSE_cc1101.setMHZ(433.898);  // Frecuencia para el ataque
   ELECHOUSE_cc1101.SetTx();
-  Serial.println("Modo de ataque activado");
+  
+  // Reiniciar el temporizador de envío
+  ultimoEnvio = millis();
+}
 
-  // Enviar paquetes de interferencia
-  byte data[] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
-  while (true) {
-    if (digitalRead(botonAtaque) == LOW) {  // Si el botón es presionado para salir
-      delay(50);  // Debounce
-      while (digitalRead(botonAtaque) == LOW);  // Espera a que el botón se suelte
-      break;  // Salir del modo de ataque
-    }
-
-    ELECHOUSE_cc1101.SendData(data, sizeof(data));  // Enviar el paquete
-    Serial.println("Paquete enviado");
-    delay(500);  // Retardo entre envíos
+// Función para gestionar el modo de ataque sin bloquear el sistema
+void gestionarModoAtaque() {
+  // Verificar si el botón de menú se ha presionado para salir del modo
+  if (leerBoton(botonMenu)) {
+    regresarMenu();
+    digitalWrite(ledAtaque, LOW);  // Apaga el LED de ataque
+    return;
   }
 
-  // Salir del modo de ataque
-  digitalWrite(ledAtaque, LOW);  // Apagar LED al salir del modo
+  // Enviar paquetes de interferencia a intervalos
+  if (millis() - ultimoEnvio >= intervaloEnvio) {
+    byte data[] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
+    ELECHOUSE_cc1101.SendData(data, sizeof(data));  // Enviar el paquete
+    Serial.println("Paquete enviado en modo ataque");
+    ultimoEnvio = millis();  // Actualizar el tiempo del último envío
+  }
+}
+
+// Función para regresar al menú principal
+void regresarMenu() {
+  estadoActual = MENU_PRINCIPAL;
+  mostrarMenuPrincipal();
+}
+
+// Función para mostrar el menú principal en la pantalla LCD
+void mostrarMenuPrincipal() {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("1: Leer Frecuencia");
   lcd.setCursor(0, 1);
   lcd.print("2: Iniciar Ataque");
-  modoSeleccionado = false;  // Permitir volver al menú
+}
+
+// Función para leer botón con debounce
+bool leerBoton(int pin) {
+  static unsigned long ultimoTiempo = 0;
+  static int ultimoEstado = HIGH;
+
+  int estadoActual = digitalRead(pin);
+  if (estadoActual == LOW && ultimoEstado == HIGH && (millis() - ultimoTiempo) > 50) {
+    ultimoTiempo = millis();
+    ultimoEstado = estadoActual;
+    return true;
+  }
+  ultimoEstado = estadoActual;
+  return false;
 }
