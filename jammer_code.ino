@@ -89,8 +89,9 @@ void iniciarModoLectura() {
 // Función para gestionar el modo de lectura
 void gestionarModoLectura() {
   if (leerBoton(botonMenu)) {  // Salir del modo de lectura
-    regresarMenu();
+    ELECHOUSE_cc1101.setSidle();  // Detener la recepción
     digitalWrite(ledLectura, LOW);  // Apaga LED de lectura
+    regresarMenu();
     return;
   }
 
@@ -132,8 +133,10 @@ void iniciarModoAtaque() {
 void gestionarModoAtaque() {
   // Verificar si el botón de menú se ha presionado para salir del modo
   if (leerBoton(botonMenu)) {
+    Serial.println("Saliendo del modo ataque.");
+    ELECHOUSE_cc1101.setSidle();  // Detener la transmisión
+    digitalWrite(ledAtaque, LOW);  // Apagar LED de ataque
     regresarMenu();
-    digitalWrite(ledAtaque, LOW);  // Apaga el LED de ataque
     return;
   }
 
@@ -152,7 +155,6 @@ void regresarMenu() {
   mostrarMenuPrincipal();
 }
 
-// Función para mostrar el menú principal en la pantalla LCD
 void mostrarMenuPrincipal() {
   lcd.clear();
   lcd.setCursor(0, 0);
