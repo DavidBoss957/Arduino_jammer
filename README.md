@@ -48,6 +48,7 @@ Connect the components as follows:
 | **LCD SCL**    | A5              |
 | **Button 1**   | Pin 4           |
 | **Button 2**   | Pin 7           |
+| **Button 3**   | Pin 6           |
 | **LED 1**      | Pin 9           |
 | **LED 2**      | Pin 8           |
 
