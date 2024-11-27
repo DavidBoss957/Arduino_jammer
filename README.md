@@ -18,7 +18,7 @@ This project implements a system to control a **CC1101** module using an **Ardui
 - **Arduino**
 - **2x CC1101 (RF module)**
 - **LCD I2C Display (16x2)**
-- **2x Buttons for interaction**
+- **3x Buttons for interaction**
 - **2x LEDs to indicate the status of reading and attack modes**
 - **Flipper zero to read and analyze frequencies**
 
